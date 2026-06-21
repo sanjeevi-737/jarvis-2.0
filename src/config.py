@@ -1,0 +1,31 @@
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+
+_ATXP_CONFIG = Path.home() / ".atxp" / "config"
+
+
+class Config:
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+
+    atxp_connection: str = ""
+    if _ATXP_CONFIG.exists():
+        atxp_connection = _ATXP_CONFIG.read_text().strip().split("=", 1)[1]
+
+    audio_input_device: int | None = (
+        int(v) if (v := os.getenv("AUDIO_INPUT_DEVICE")) else None
+    )
+    tts_voice: str = os.getenv("TTS_VOICE", "en-US-AriaNeural")
+    poll_interval: int = int(os.getenv("POLL_INTERVAL", "30"))
+    model: str = os.getenv("JARVIS_MODEL", "gpt-4.1-nano")
+    recordings_dir: Path = ROOT_DIR / "recordings"
+
+    @classmethod
+    def validate(cls) -> list[str]:
+        errors = []
+        if not cls.openai_api_key and not cls.atxp_connection:
+            errors.append("Neither OPENAI_API_KEY nor ATXP connection found")
+        return errors

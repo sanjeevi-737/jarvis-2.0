@@ -1,0 +1,123 @@
+import asyncio
+import json
+import threading
+from queue import Queue
+from src.audio.recorder import AudioRecorder
+from src.audio.stt import transcribe
+from src.audio.tts import speak
+from src.ai.llm import chat
+from src.ai.memory import ConversationMemory
+from src.engine.wake_word import WakeWordDetector
+from src.engine.hotkey import HotkeyListener
+from src.tools.registry import get_tool_definitions, execute_tool
+from src.monitor.notifier import InboundNotifier
+from src.monitor.poller import InboundPoller
+from src.ui.cli import CLI
+
+
+class Jarvis:
+    def __init__(self):
+        self.recorder = AudioRecorder()
+        self.memory = ConversationMemory()
+        self.notifier = InboundNotifier()
+        self.poller = InboundPoller(self.notifier)
+        self.cli = CLI()
+        self._active = False
+        self._running = True
+        self._activation_queue: Queue = Queue()
+
+    async def start(self) -> None:
+        self.cli.banner()
+        self.cli.status("Say 'Hey Jarvis' or press Ctrl+Space.")
+
+        self.notifier.on_notification = self.cli.notification
+
+        poller_task = asyncio.create_task(self.poller.start())
+
+        wake_word = WakeWordDetector()
+        hotkey = HotkeyListener()
+
+        wake_thread = threading.Thread(
+            target=self._wake_loop, args=(wake_word,), daemon=True
+        )
+        wake_thread.start()
+
+        hotkey.on_activate(self._manual_activate)
+        hotkey.start()
+
+        try:
+            while self._running:
+                while not self._activation_queue.empty():
+                    source = self._activation_queue.get_nowait()
+                    await self._handle_activation(source)
+                await asyncio.sleep(0.1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self._running = False
+            self.poller.stop()
+            poller_task.cancel()
+            wake_word.cleanup()
+            hotkey.stop()
+
+    def _wake_loop(self, detector: WakeWordDetector) -> None:
+        while self._running:
+            if detector.listen():
+                if not self._active:
+                    self._active = True
+                    self._activation_queue.put("wake word")
+
+    def _manual_activate(self) -> None:
+        if not self._active:
+            self._active = True
+            self._activation_queue.put("hotkey")
+
+    async def _handle_activation(self, source: str) -> None:
+        self.cli.status(f"Activated via {source}")
+        self.cli.listening()
+
+        audio = self.recorder.record_until_silence()
+        if len(audio) < 1600:
+            self.cli.status("No speech detected.")
+            self._active = False
+            return
+
+        audio_path = AudioRecorder.save_temp(audio)
+        self.cli.status("Transcribing...")
+        text = transcribe(audio_path)
+        if not text:
+            self.cli.status("Could not transcribe audio.")
+            self._active = False
+            return
+
+        self.cli.user_input(text)
+
+        self.memory.add_user(text)
+        tools = get_tool_definitions()
+        self.cli.thinking()
+        message = chat(self.memory.get_messages(), tools)
+
+        if message.tool_calls:
+            self.memory.add_tool_calls(message)
+            for tc in message.tool_calls:
+                self.cli.status(f"Using tool: {tc.function.name}")
+                args = json.loads(tc.function.arguments)
+                result = await execute_tool(tc.function.name, args)
+                self.memory.add_tool_result(tc.id, result)
+
+            self.cli.thinking()
+            follow_up = chat(self.memory.get_messages())
+            response_text = follow_up.content or ""
+        else:
+            response_text = message.content or ""
+
+        if not response_text:
+            response_text = "I'm sorry, Sir. I didn't get a response."
+            self.cli.assistant(response_text)
+            await speak(response_text)
+        else:
+            self.cli.assistant(response_text)
+            await speak(response_text)
+
+        self._active = False
+        self.cli.status("Standing by.")
