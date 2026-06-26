@@ -9,7 +9,7 @@ from src.ai.llm import chat
 from src.ai.memory import ConversationMemory
 from src.engine.wake_word import WakeWordDetector
 from src.engine.hotkey import HotkeyListener
-from src.tools.registry import get_tool_definitions, execute_tool
+from src.tools.registry import get_tool_definitions, execute_tool, load_tools
 from src.monitor.notifier import InboundNotifier
 from src.monitor.poller import InboundPoller
 from src.ui.cli import CLI
@@ -22,7 +22,7 @@ class Jarvis:
         self.notifier = InboundNotifier()
         self.poller = InboundPoller(self.notifier)
         self.cli = CLI()
-        self._active = False
+        self._active = threading.Event()
         self._running = True
         self._activation_queue: Queue = Queue()
 
@@ -31,6 +31,8 @@ class Jarvis:
         self.cli.status("Say 'Hey Jarvis' or press Ctrl+Space.")
 
         self.notifier.on_notification = self.cli.notification
+
+        load_tools()
 
         poller_task = asyncio.create_task(self.poller.start())
 
@@ -43,7 +45,6 @@ class Jarvis:
         wake_thread.start()
 
         hotkey.on_activate(self._manual_activate)
-        hotkey.start()
 
         try:
             while self._running:
@@ -63,13 +64,13 @@ class Jarvis:
     def _wake_loop(self, detector: WakeWordDetector) -> None:
         while self._running:
             if detector.listen():
-                if not self._active:
-                    self._active = True
+                if not self._active.is_set():
+                    self._active.set()
                     self._activation_queue.put("wake word")
 
     def _manual_activate(self) -> None:
-        if not self._active:
-            self._active = True
+        if not self._active.is_set():
+            self._active.set()
             self._activation_queue.put("hotkey")
 
     async def _handle_activation(self, source: str) -> None:
@@ -89,7 +90,14 @@ class Jarvis:
 
         audio_path = AudioRecorder.save_temp(audio)
         self.cli.status("Transcribing...")
-        text = transcribe(audio_path)
+        try:
+            text = transcribe(audio_path)
+        finally:
+            try:
+                import os
+                os.unlink(audio_path)
+            except OSError:
+                pass
         if not text:
             self.cli.status("Could not transcribe audio.")
             self._reset()
@@ -101,12 +109,14 @@ class Jarvis:
         tools = get_tool_definitions()
 
         try:
-            self.cli.thinking()
+            self.cli.start_thinking()
             message = chat(self.memory.get_messages(), tools)
         except Exception as e:
             self.cli.error(f"LLM error: {e}")
             self._reset()
             return
+        finally:
+            self.cli.stop_thinking()
 
         try:
             if message.tool_calls:
@@ -117,8 +127,11 @@ class Jarvis:
                     result = await execute_tool(tc.function.name, args)
                     self.memory.add_tool_result(tc.id, result)
 
-                self.cli.thinking()
-                follow_up = chat(self.memory.get_messages())
+                self.cli.start_thinking()
+                try:
+                    follow_up = chat(self.memory.get_messages())
+                finally:
+                    self.cli.stop_thinking()
                 response_text = follow_up.content or ""
             else:
                 response_text = message.content or ""
@@ -134,6 +147,6 @@ class Jarvis:
         self._reset()
 
     def _reset(self) -> None:
-        self._active = False
+        self._active.clear()
         self.cli.status("Standing by.")
         self.wake_word.resume()

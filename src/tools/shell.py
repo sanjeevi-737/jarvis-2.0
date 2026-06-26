@@ -1,4 +1,6 @@
 import asyncio
+import sys
+import shutil
 
 from src.tools.registry import tool
 
@@ -22,6 +24,10 @@ ALLOWED_COMMANDS = {
     },
 )
 async def run_shell(command: str) -> str:
+    if sys.platform != "win32":
+        return "Error: Shell tool is only available on Windows."
+    if not shutil.which("powershell"):
+        return "Error: PowerShell not found."
     cmd_base = command.split()[0].lower() if command.split() else ""
     if cmd_base not in ALLOWED_COMMANDS:
         return f"Error: Command '{cmd_base}' is not in the safe allowed list."

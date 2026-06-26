@@ -13,7 +13,12 @@ class Config:
 
     atxp_connection: str = ""
     if _ATXP_CONFIG.exists():
-        atxp_connection = _ATXP_CONFIG.read_text().strip().split("=", 1)[1]
+        try:
+            raw = _ATXP_CONFIG.read_text().strip()
+            parts = raw.split("=", 1)
+            atxp_connection = parts[1].strip() if len(parts) == 2 else raw
+        except Exception:
+            pass
 
     use_atxp: bool = os.getenv("USE_ATXP", "1") == "1"
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")

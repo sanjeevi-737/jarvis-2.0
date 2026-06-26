@@ -43,5 +43,7 @@ async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
         return json.dumps({"error": str(e)})
 
 
-import src.tools.atxp_bridge  # noqa: F401, E402
-import src.tools.shell  # noqa: F401, E402
+def load_tools() -> None:
+    import src.tools.atxp_bridge  # noqa: F401
+    import src.tools.shell  # noqa: F401
+    import src.tools.contacts  # noqa: F401

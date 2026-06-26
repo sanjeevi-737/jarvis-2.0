@@ -47,9 +47,6 @@ class AudioRecorder:
             if has_spoken and silence_chunks >= max_silence_chunks:
                 break
 
-        if not has_spoken and len(chunks) >= min_audio_chunks:
-            pass
-
         return np.concatenate(chunks) if chunks else np.array([], dtype=DTYPE)
 
     @staticmethod

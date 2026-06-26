@@ -2,6 +2,7 @@ from openai import OpenAI
 from src.config import Config
 
 _client: OpenAI | None = None
+_client_config: tuple[str, str] | None = None
 
 ATXP_LLM_URL = "https://llm.atxp.ai/v1"
 OPENAI_API_URL = "https://api.openai.com/v1"
@@ -20,16 +21,18 @@ Available tools: make phone calls, send SMS, send email, search the web, run she
 
 
 def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        base_url = Config.openai_base_url
-        if not base_url:
-            if Config.use_atxp and Config.atxp_connection:
-                base_url = ATXP_LLM_URL
-            else:
-                base_url = OPENAI_API_URL
-        api_key = Config.atxp_connection if base_url == ATXP_LLM_URL else Config.openai_api_key
+    global _client, _client_config
+    base_url = Config.openai_base_url
+    if not base_url:
+        if Config.use_atxp and Config.atxp_connection:
+            base_url = ATXP_LLM_URL
+        else:
+            base_url = OPENAI_API_URL
+    api_key = Config.atxp_connection if base_url == ATXP_LLM_URL else Config.openai_api_key
+    current_config = (base_url, api_key)
+    if _client is None or _client_config != current_config:
         _client = OpenAI(api_key=api_key, base_url=base_url)
+        _client_config = current_config
     return _client
 
 

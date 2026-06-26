@@ -16,8 +16,5 @@ class HotkeyListener:
         if self._callback:
             self._callback()
 
-    def start(self) -> None:
-        pass
-
     def stop(self) -> None:
         keyboard.unhook_all()

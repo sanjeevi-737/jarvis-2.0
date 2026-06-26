@@ -24,12 +24,13 @@ def _get_engine() -> pyttsx3.Engine:
 
 
 def _speak_sync(text: str) -> None:
-    try:
-        engine = _get_engine()
-        engine.say(text)
-        engine.runAndWait()
-    except Exception:
-        pass
+    with _lock:
+        try:
+            engine = _get_engine()
+            engine.say(text)
+            engine.runAndWait()
+        except Exception:
+            pass
 
 
 async def speak(text: str) -> None:

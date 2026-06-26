@@ -28,7 +28,8 @@ class InboundPoller:
 
     async def _check_email(self) -> None:
         result = await _run_npx(["email", "inbox"])
-        count = result.count("unread") if "unread" in result.lower() else 0
+        lower_result = result.lower()
+        count = lower_result.count("\nunread") if "unread" in lower_result else 0
         if count > self._last_email_count:
             self.notifier.notify_email(count - self._last_email_count)
         self._last_email_count = count

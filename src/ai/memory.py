@@ -68,9 +68,17 @@ class ConversationMemory:
         self.summary = None
 
     def _trim(self) -> None:
-        if len(self.messages) > self.max_messages:
-            excess = self.messages[:len(self.messages) - self.max_messages // 2]
-            self.summary = f"Previous topics: {'; '.join(
-                m.get('content', '')[:80] for m in excess if m['role'] == 'user'
-            )}"
-            self.messages = self.messages[-(self.max_messages // 2):]
+        if len(self.messages) <= self.max_messages:
+            return
+        keep_from = len(self.messages) - (self.max_messages // 2)
+        # Don't split a tool_call message from its tool results
+        while keep_from < len(self.messages) and self.messages[keep_from]["role"] == "tool":
+            keep_from += 1
+        excess = self.messages[:keep_from]
+        topics = [
+            (m.get("content") or "")[:80]
+            for m in excess
+            if m["role"] == "user" and m.get("content")
+        ]
+        self.summary = f"Previous topics: {'; '.join(topics)}" if topics else self.summary
+        self.messages = self.messages[keep_from:]

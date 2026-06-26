@@ -42,8 +42,8 @@ def transcribe(audio_path: str) -> str:
     try:
         model = _get_model()
         audio, sr = _read_wav(audio_path)
-        audio = _normalize(audio)
         audio = _remove_silence(audio, sr)
+        audio = _normalize(audio)
         segments, info = model.transcribe(
             audio,
             language="en",

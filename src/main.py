@@ -35,6 +35,7 @@ def main() -> None:
         def on_quit(icon, item):
             icon.stop()
             jarvis._running = False
+            t.join(timeout=5.0)
 
         icon = pystray.Icon("JARVIS", create_image(), "JARVIS PRIME", menu=pystray.Menu(pystray.MenuItem("Quit", on_quit)))
         icon.run()
