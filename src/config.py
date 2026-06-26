@@ -15,12 +15,15 @@ class Config:
     if _ATXP_CONFIG.exists():
         atxp_connection = _ATXP_CONFIG.read_text().strip().split("=", 1)[1]
 
+    use_atxp: bool = os.getenv("USE_ATXP", "1") == "1"
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")
+
     audio_input_device: int | None = (
         int(v) if (v := os.getenv("AUDIO_INPUT_DEVICE")) else None
     )
     tts_voice: str = os.getenv("TTS_VOICE", "en-US-AriaNeural")
     poll_interval: int = int(os.getenv("POLL_INTERVAL", "30"))
-    model: str = os.getenv("JARVIS_MODEL", "gpt-4.1-nano")
+    model: str = os.getenv("OPENAI_MODEL", os.getenv("JARVIS_MODEL", "gpt-4o-mini"))
     recordings_dir: Path = ROOT_DIR / "recordings"
 
     @classmethod

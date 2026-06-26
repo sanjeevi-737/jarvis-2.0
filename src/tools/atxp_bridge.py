@@ -1,12 +1,12 @@
 import asyncio
-import json
-import shlex
-from typing import Optional
 
+from src.config import Config
 from src.tools.registry import tool
 
 
 async def _run_npx(args: list[str]) -> str:
+    if not Config.use_atxp or not Config.atxp_connection:
+        return "ATXP is not configured. Set USE_ATXP=1 and register with `npx atxp agent register` to use this feature."
     cmd = ["atxp.cmd"] + args
     proc = await asyncio.create_subprocess_exec(
         *cmd,

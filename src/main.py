@@ -18,9 +18,10 @@ def main() -> None:
         from PIL import Image, ImageDraw
 
         def create_image():
-            img = Image.new("RGB", (64, 64), "black")
+            img = Image.new("RGB", (64, 64), (10, 10, 15))
             dc = ImageDraw.Draw(img)
-            dc.ellipse((8, 8, 56, 56), fill="cyan")
+            dc.ellipse((6, 6, 58, 58), fill=(30, 27, 50))
+            dc.ellipse((10, 10, 54, 54), fill=(167, 139, 250))
             return img
 
         jarvis = Jarvis()

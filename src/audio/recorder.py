@@ -15,12 +15,12 @@ class AudioRecorder:
         self.device = Config.audio_input_device
 
     def record_until_silence(
-        self, max_duration: float = 30.0, silence_threshold: float = 300.0
+        self, max_duration: float = 30.0, silence_threshold: float = 200.0
     ) -> np.ndarray:
         chunks = []
-        chunk_duration = 0.3
+        chunk_duration = 0.15
         silence_chunks = 0
-        max_silence_chunks = 10
+        max_silence_chunks = 8
         min_audio_chunks = 3
         has_spoken = False
 

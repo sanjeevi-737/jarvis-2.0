@@ -1,5 +1,5 @@
 import json
-from pathlib import Path
+
 from src.config import ROOT_DIR
 
 CONTACTS_FILE = ROOT_DIR / "config" / "local_contacts.json"

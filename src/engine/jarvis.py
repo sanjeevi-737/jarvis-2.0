@@ -34,11 +34,11 @@ class Jarvis:
 
         poller_task = asyncio.create_task(self.poller.start())
 
-        wake_word = WakeWordDetector()
+        self.wake_word = WakeWordDetector()
         hotkey = HotkeyListener()
 
         wake_thread = threading.Thread(
-            target=self._wake_loop, args=(wake_word,), daemon=True
+            target=self._wake_loop, args=(self.wake_word,), daemon=True
         )
         wake_thread.start()
 
@@ -57,7 +57,7 @@ class Jarvis:
             self._running = False
             self.poller.stop()
             poller_task.cancel()
-            wake_word.cleanup()
+            self.wake_word.cleanup()
             hotkey.stop()
 
     def _wake_loop(self, detector: WakeWordDetector) -> None:
@@ -74,12 +74,17 @@ class Jarvis:
 
     async def _handle_activation(self, source: str) -> None:
         self.cli.status(f"Activated via {source}")
+        self.wake_word.pause()
         self.cli.listening()
 
-        audio = self.recorder.record_until_silence()
-        if len(audio) < 1600:
+        try:
+            audio = self.recorder.record_until_silence()
+        except Exception:
+            audio = None
+
+        if audio is None or len(audio) < 1600:
             self.cli.status("No speech detected.")
-            self._active = False
+            self._reset()
             return
 
         audio_path = AudioRecorder.save_temp(audio)
@@ -87,37 +92,48 @@ class Jarvis:
         text = transcribe(audio_path)
         if not text:
             self.cli.status("Could not transcribe audio.")
-            self._active = False
+            self._reset()
             return
 
         self.cli.user_input(text)
 
         self.memory.add_user(text)
         tools = get_tool_definitions()
-        self.cli.thinking()
-        message = chat(self.memory.get_messages(), tools)
 
-        if message.tool_calls:
-            self.memory.add_tool_calls(message)
-            for tc in message.tool_calls:
-                self.cli.status(f"Using tool: {tc.function.name}")
-                args = json.loads(tc.function.arguments)
-                result = await execute_tool(tc.function.name, args)
-                self.memory.add_tool_result(tc.id, result)
-
+        try:
             self.cli.thinking()
-            follow_up = chat(self.memory.get_messages())
-            response_text = follow_up.content or ""
-        else:
-            response_text = message.content or ""
+            message = chat(self.memory.get_messages(), tools)
+        except Exception as e:
+            self.cli.error(f"LLM error: {e}")
+            self._reset()
+            return
 
-        if not response_text:
-            response_text = "I'm sorry, Sir. I didn't get a response."
+        try:
+            if message.tool_calls:
+                self.memory.add_tool_calls(message)
+                for tc in message.tool_calls:
+                    self.cli.status(f"Using tool: {tc.function.name}")
+                    args = json.loads(tc.function.arguments)
+                    result = await execute_tool(tc.function.name, args)
+                    self.memory.add_tool_result(tc.id, result)
+
+                self.cli.thinking()
+                follow_up = chat(self.memory.get_messages())
+                response_text = follow_up.content or ""
+            else:
+                response_text = message.content or ""
+
+            if not response_text:
+                response_text = "I'm sorry, Sir. I didn't get a response."
+
             self.cli.assistant(response_text)
             await speak(response_text)
-        else:
-            self.cli.assistant(response_text)
-            await speak(response_text)
+        except Exception as e:
+            self.cli.error(f"Response error: {e}")
 
+        self._reset()
+
+    def _reset(self) -> None:
         self._active = False
         self.cli.status("Standing by.")
+        self.wake_word.resume()

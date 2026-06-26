@@ -12,6 +12,8 @@ class InboundPoller:
         self._last_sms_count = 0
 
     async def start(self) -> None:
+        if not Config.use_atxp or not Config.atxp_connection:
+            return
         self._running = True
         while self._running:
             try:
