@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os               # FIX: import at module level, not inside a finally block
 import threading
 from queue import Queue
 from src.audio.recorder import AudioRecorder
@@ -90,14 +91,16 @@ class Jarvis:
 
         audio_path = AudioRecorder.save_temp(audio)
         self.cli.status("Transcribing...")
+
+        # FIX: os imported at top — temp file always deleted, even if transcribe() throws
         try:
             text = transcribe(audio_path)
         finally:
             try:
-                import os
                 os.unlink(audio_path)
             except OSError:
                 pass
+
         if not text:
             self.cli.status("Could not transcribe audio.")
             self._reset()

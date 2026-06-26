@@ -3,7 +3,6 @@ import time
 import threading
 import vosk
 import sounddevice as sd
-import numpy as np
 from pathlib import Path
 from src.config import Config
 
@@ -18,13 +17,18 @@ class WakeWordDetector:
                 "Download from: https://alphacephei.com/vosk/models\n"
                 "Place in: models/vosk-model-small-en-us-0.15/"
             )
+
+        # FIX: initialise _stream to None BEFORE any operation that could throw.
+        # If vosk.Model() or KaldiRecognizer raises, cleanup() won't AttributeError.
+        self._stream: sd.InputStream | None = None
+
         self.model = vosk.Model(str(_MODEL_PATH))
         self.sample_rate = 16000
         self.rec = vosk.KaldiRecognizer(self.model, self.sample_rate, '["hey jarvis", "jarvis"]')
         self.rec.SetWords(True)
-        self.available = True
         self._paused = threading.Event()
         self._cooldown_until = 0.0
+
         self._stream = sd.InputStream(
             samplerate=self.sample_rate,
             channels=1,
@@ -62,5 +66,8 @@ class WakeWordDetector:
                         return True
 
     def cleanup(self) -> None:
-        self._stream.stop()
-        self._stream.close()
+        # FIX: guard against _stream being None (e.g. __init__ threw before stream was created)
+        if self._stream is not None:
+            self._stream.stop()
+            self._stream.close()
+            self._stream = None

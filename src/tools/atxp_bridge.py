@@ -3,17 +3,28 @@ import asyncio
 from src.config import Config
 from src.tools.registry import tool
 
+_CLI_TIMEOUT = 30.0  # seconds — prevent indefinite hang if ATXP CLI stalls
+
 
 async def _run_npx(args: list[str]) -> str:
     if not Config.use_atxp or not Config.atxp_connection:
         return "ATXP is not configured. Set USE_ATXP=1 and register with `npx atxp agent register` to use this feature."
+
     cmd = ["atxp.cmd"] + args
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+
+    # FIX: wrap communicate() in wait_for so a stalled CLI never blocks JARVIS forever
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=_CLI_TIMEOUT)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()  # drain to avoid resource leak
+        return f"Error: ATXP CLI timed out after {_CLI_TIMEOUT:.0f}s."
+
     if proc.returncode != 0:
         return f"Error: {stderr.decode().strip()}"
     return stdout.decode().strip()
